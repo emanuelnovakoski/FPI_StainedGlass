@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 2.8)
+project( FPI_T1 )
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+add_executable( tf tf.cpp )
+target_link_libraries( tf ${OpenCV_LIBS} )
