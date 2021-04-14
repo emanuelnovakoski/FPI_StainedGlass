@@ -1,0 +1,3 @@
+/home/emanuel/Desktop/FPI/final_git/CMakeFiles/rebuild_cache.dir
+/home/emanuel/Desktop/FPI/final_git/CMakeFiles/edit_cache.dir
+/home/emanuel/Desktop/FPI/final_git/CMakeFiles/tf.dir

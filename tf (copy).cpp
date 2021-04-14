@@ -14,9 +14,9 @@ using namespace cv;
 #define RWEIGHT 0.299
 #define GWEIGHT 0.587
 #define BWEIGHT 0.114
-#define QUANTIZATIONDEFAULT 150
 #define ERODED 0
-#define INVOKEERROR "usage: tf <Image_Path> [-q <quantization_amount>] [-s <steps_amount\n"
+#define QUANTIZATIONDEFAULT 150
+#define INVOKEERROR "usage: tf <Image_Path> [-q <Quantization_Amount>]\n"
 
 Mat imageIn, quantized, region;
 int maxRegion = 0;
@@ -52,6 +52,8 @@ void quantization(int amount)
 		exit(0);
 	}
 	
+	
+	printf("Quantizing...\n");
 	// convert image to grayscale
 	luminance(); 
 	
@@ -78,8 +80,6 @@ void quantization(int amount)
 	
 	// set bin
 	for (int i=0;i<sizey;i++)
-	{
-		std::cout << "Quantizing... " << std::setprecision(4) << ((float)i/sizey)*100 << "%     \t\t\r" << std::flush;
 		for (int j=0;j<sizex;j++)
 		{
 			Vec3b pixel = quantized.at<Vec3b>(i,j);
@@ -90,8 +90,6 @@ void quantization(int amount)
 			pixel.val[B] = newVal;
 			quantized.at<Vec3b>(i,j) = pixel;			
 		}
-	}
-	printf("Quantizing... 100%%     \n");
 }
 
 void segment()
@@ -109,7 +107,7 @@ void segment()
 			current[i][j] = false;
 			processed[i][j] = false;
 		}
-	int regioni = 1;
+	int regioni = 0;
 	for(int i=0; i<sizey; i++)
 	{
 	std::cout << "Segmenting... " << std::setprecision(4) << ((float)i/sizey)*100 << "%     \t\t\r" << std::flush;
@@ -152,7 +150,7 @@ void segment()
 								current[k][l] = true;
 								region.at<int>(k,l) = regioni;
 							}
-							if((l+1 < sizex)&&(current[k][l+1])&&((quantized.at<Vec3b>(k,l+1)).val[R] == value)&&(!current[k][l]))
+							if((l+1 < sizey)&&(current[k][l+1])&&((quantized.at<Vec3b>(k,l+1)).val[R] == value)&&(!current[k][l]))
 							{
 								_continue = true;
 								processed[k][l] = true;
@@ -183,72 +181,134 @@ void segment()
 				}
 		}
 	}
-	printf("Segmenting... 100%%     \n");
+	printf("\n\n");
 	maxRegion = regioni;
-
 }
 
 void erode()
 {
+	printf("region is %d, %d\nquantized is %d, %d\n", region.rows, region.cols, quantized.rows, quantized.cols);
 	int sizex = region.cols;
 	int sizey = region.rows;
-	Mat temp;
-	temp = region.clone();
-	for(int r=1; r<maxRegion; r++)
+	Mat temp = region.clone();
+//	for(int r=1; r<maxRegion; r++)
 	{
-		std::cout << "	Progress... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
-		for(int i=1; i<sizey-1; i++)
+	int r=2;
+//	std::cout << "Eroding... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
+		for(int i=0; i< sizey; i++)
 		{
-			for(int j=1; j<sizex-1; j++)
+			for(int j=0; j<sizex; j++)
 			{
-				if((temp.at<int>(i,j) == r) && 
-				((temp.at<int>(i-1,j) != r) || (temp.at<int>(i+1,j) != r) || (temp.at<int>(i,j+1) != r) || (temp.at<int>(i,j-1) != r)) 
-				)
+				if(temp.at<int>(i,j) == r)
 				{
-					region.at<int>(i,j) = ERODED;
-					Vec3b pixel;
-					pixel.val[R] = 0;
-					pixel.val[G] = 0;
-					pixel.val[B] = 0;
-					quantized.at<Vec3b>(i,j) = pixel;	
-				}	
+					bool edge = false;
+/*					if((i > 0) && (temp.at<int>(i-1, j) != r))
+					{
+						edge = true;	
+					}
+*/					if((j > 0) && (temp.at<int>(i, j-1) != r))
+					{
+						edge = true;
+					}
+/*					if((i < sizey-1) && (temp.at<int>(i+1, j) != r))
+					{
+						edge = true;
+					}
+					if((j < sizex-1) && (temp.at<int>(i, j+1) != r))
+					{
+						edge = true;
+					}
 					
+*/					if(edge)
+					{
+						region.at<int>(i,j) = ERODED;
+
+					}
+					
+				}	
 			}
 		}
 	}
-	printf("	Progress... 100%%         \n");
+	for(int i=0; i<sizey; i++)
+		for(int j=0; j<sizex; j++)
+		{
+			if(region.at<int>(i,j) == ERODED)
+			{
+				Vec3b pixel;
+				pixel.val[R] = 255;
+				pixel.val[G] = 0;
+				pixel.val[B] = 0;
+				quantized.at<Vec3b>(i,j) = pixel;
+			}
+		}
 }
 
 void dilate()
 {
 	int sizex = region.cols;
 	int sizey = region.rows;
-	Mat temp;
-	temp = region.clone();
+	Mat temp = region.clone();
 	for(int r=1; r<maxRegion; r++)
 	{
-	std::cout << "Progress... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
-		for(int i=1; i<sizey-1; i++)
+		int red = rand()%256;
+		int green = rand()%256;
+		int blue = rand()%256;
+		for(int i=0; i< sizey; i++)
 		{
-			for(int j=1; j<sizex-1; j++)
+			for(int j=0; j<sizex; j++)
 			{
-				if((temp.at<int>(i,j) == ERODED) && 
-				((temp.at<int>(i-1,j) == r) || (temp.at<int>(i+1,j) == r) || (temp.at<int>(i,j+1) == r) || (temp.at<int>(i,j-1) == r)))
+								
+				if(temp.at<int>(i,j) == ERODED)
 				{
-					region.at<int>(i,j) = r;
-				}	
+					bool edge = false;
+					if((i > 0) && (temp.at<int>(i-1, j) == r))
+					{
+						edge = true;
+						red = quantized.at<Vec3b>(i-1, j).val[R];
+						green = quantized.at<Vec3b>(i-1, j).val[G];
+						blue = quantized.at<Vec3b>(i-1, j).val[B];
+					}
+					if((j > 0) && (temp.at<int>(i, j-1) == r))
+					{
+						edge = true;
+						red = quantized.at<Vec3b>(i+1, j).val[R];
+						green = quantized.at<Vec3b>(i+1, j).val[G];
+						blue = quantized.at<Vec3b>(i+1, j).val[B];
+					}
+					if((i < sizey-1) && (temp.at<int>(i+1, j) == r))
+					{
+						edge = true;
+						red = quantized.at<Vec3b>(i+1, j).val[R];
+						green = quantized.at<Vec3b>(i+1, j).val[G];
+						blue = quantized.at<Vec3b>(i+1, j).val[B];
+					}
+					if((j < sizex-1) && (temp.at<int>(i, j+1) == r))
+					{
+						edge = true;
+						red = quantized.at<Vec3b>(i, j+1).val[R];
+						green = quantized.at<Vec3b>(i, j+1).val[G];
+						blue = quantized.at<Vec3b>(i, j+1).val[B];
+					}
 					
+					if(edge)
+					{
+						region.at<int>(i,j) = r;
+						Vec3b pixel;
+						pixel.val[R] = red;
+						pixel.val[G] = green;
+						pixel.val[B] = blue;
+						quantized.at<Vec3b>(i,j) = pixel;
+					}
+					
+				}	
 			}
 		}
-		
-	}
-	printf("	Progress... 100%%         \n");
+	}	
 }
-
 
 int main(int argc, char** argv)
 {
-	int quantizationAmount, stepAmount;
+	int quantizationAmount;
 	char* filename;
 	if ( argc < 2 )
     {
@@ -271,13 +331,6 @@ int main(int argc, char** argv)
     		printf(INVOKEERROR);
     		}
 		}
-		else if (strcmp(argv[i], "-s") == 0)
-		{
-			if (i+1 < argc)
-			{
-				stepAmount = atoi(argv[i+1]);
-			}
-		}
     }
     if (quantizationAmount <= 0)
     {
@@ -292,55 +345,51 @@ int main(int argc, char** argv)
 	srand(time(NULL));
     
     quantized = imageIn.clone();
-    
     quantization(quantizationAmount);
+    
+    imwrite("quantized.jpg", quantized);
     
     namedWindow("Input Image", WINDOW_AUTOSIZE );
     namedWindow("Output Image", WINDOW_AUTOSIZE);
     imshow("Input Image", imageIn);
     
-    region = Mat::zeros(quantized.rows, quantized.cols, CV_32S);
+    region = Mat::zeros(imageIn.rows, imageIn.cols, CV_16S);
     
     segment();
     
-    for(int i=0; i<stepAmount; i++)
+    FILE* dump = fopen("region.txt", "w");
+    for(int i=0; i<region.rows; i++)
     {
-    	printf("Eroding... #%d\n", i+1);
-    	erode();
+    	for(int j=0; j<region.cols; j++)
+    	{
+    		fprintf(dump, "%d ", region.at<int>(i,j));
+    	}
+    	fprintf(dump, "\r\n");
     }
+    fflush(dump);
+    fclose(dump);
     
-    for(int i=0; i<stepAmount + 2; i++)
+    imwrite("seedRegion.jpg", quantized);
+    
+    erode();
+    imwrite("erodedRegion.jpg", quantized);
+    
+//    dilate();
+   	imshow("Output Image", quantized);
+//    imwrite("dilatedRegion.jpg", quantized);
+   
+    
+    dump = fopen("eroded.txt", "w");
+    for(int i=0; i<region.rows; i++)
     {
-    	printf("Dilating... #%d\n", i+1);
-    	dilate();
+    	for(int j=0; j<region.cols; j++)
+    	{
+    		fprintf(dump, "%d ", region.at<int>(i,j));
+    	}
+    	fprintf(dump, "\r\n");
     }
+    fflush(dump);
     
-	for(int r=0; r<maxRegion; r++)
-	{
-		int _r = rand() % 256;
-		int _g = rand() % 256;
-		int _b = rand() % 256;
-		
-		for(int i=0; i<region.cols; i++)
-		{
-			for(int j=0; j<region.rows; j++)
-			{
-				if(region.at<int>(i,j) == r)
-				{
-					Vec3b pixel;
-					pixel.val[R] = _r;
-					pixel.val[G] = _g;
-					pixel.val[B] = _b;
-					quantized.at<Vec3b>(i,j) = pixel;	
-				}
-			}
-		}
-	}
-
-    imwrite("quantized.jpg", quantized);
-    
-	imshow("Output Image", quantized);
     waitKey(0);
-
     return 0;
 }
