@@ -197,12 +197,15 @@ void erode()
 	for(int r=1; r<maxRegion; r++)
 	{
 		std::cout << "	Progress... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
-		for(int i=1; i<sizey-1; i++)
+		for(int i=0; i<sizey; i++)
 		{
-			for(int j=1; j<sizex-1; j++)
+			for(int j=0; j<sizex; j++)
 			{
-				if((temp.at<int>(i,j) == r) && 
-				((temp.at<int>(i-1,j) != r) || (temp.at<int>(i+1,j) != r) || (temp.at<int>(i,j+1) != r) || (temp.at<int>(i,j-1) != r)) 
+				if((temp.at<int>(i,j) == r) && (
+				(((i-1 > 0) && (temp.at<int>(i-1,j) != r))) || 
+				(((i+1 < sizey-1) && (temp.at<int>(i+1,j) != r))) || 
+				(((j+1 < sizex-1) && (temp.at<int>(i,j+1) != r))) || 
+				(((j-1 > 0) && (temp.at<int>(i,j-1) != r))))
 				)
 				{
 					region.at<int>(i,j) = ERODED;
@@ -232,8 +235,12 @@ void dilate()
 		{
 			for(int j=1; j<sizex-1; j++)
 			{
-				if((temp.at<int>(i,j) == ERODED) && 
-				((temp.at<int>(i-1,j) == r) || (temp.at<int>(i+1,j) == r) || (temp.at<int>(i,j+1) == r) || (temp.at<int>(i,j-1) == r)))
+				if((temp.at<int>(i,j) == ERODED) && (
+				(((i-1 > 0) && (temp.at<int>(i-1,j) == r))) || 
+				(((i+1 < sizey-1) && (temp.at<int>(i+1,j) == r))) || 
+				(((j+1 < sizex-1) && (temp.at<int>(i,j+1) == r))) || 
+				(((j-1 > 0) && (temp.at<int>(i,j-1) == r))))
+				)
 				{
 					region.at<int>(i,j) = r;
 				}	
@@ -248,7 +255,7 @@ void dilate()
 
 int main(int argc, char** argv)
 {
-	int quantizationAmount, stepAmount;
+	int quantizationAmount, stepAmount = 5;
 	char* filename;
 	if ( argc < 2 )
     {
@@ -308,13 +315,11 @@ int main(int argc, char** argv)
     	printf("Eroding... #%d\n", i+1);
     	erode();
     }
-    
     for(int i=0; i<stepAmount + 2; i++)
     {
     	printf("Dilating... #%d\n", i+1);
     	dilate();
     }
-    
 	for(int r=0; r<maxRegion; r++)
 	{
 		int _r = rand() % 256;
