@@ -6,6 +6,20 @@
 
 #IncludeRegexTransform: 
 
+/home/emanuel/Desktop/FPI/final_git/FastNoiseLite.h
+math.h
+-
+stdint.h
+-
+stdbool.h
+-
+float.h
+-
+
+/home/emanuel/Desktop/FPI/final_git/colors.h
+opencv2/opencv.hpp
+-
+
 /home/emanuel/Desktop/FPI/final_git/tf.cpp
 stdio.h
 -
@@ -21,6 +35,10 @@ opencv2/opencv.hpp
 -
 opencv2/highgui.hpp
 -
+colors.h
+/home/emanuel/Desktop/FPI/final_git/colors.h
+FastNoiseLite.h
+/home/emanuel/Desktop/FPI/final_git/FastNoiseLite.h
 
 /usr/local/include/opencv4/opencv2/calib3d.hpp
 opencv2/core.hpp

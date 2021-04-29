@@ -5,21 +5,46 @@
 #include <math.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
+#include "colors.h"
+#include "FastNoiseLite.h"
 
 using namespace cv;
 
+#define FNL_IMPL
 #define B 0
 #define G 1
 #define R 2
+#define X 2
+#define Y 1
+#define Z 0
+#define KS 250
+#define KA 0.5
+#define KD 160
+#define Q 100
 #define RWEIGHT 0.299
 #define GWEIGHT 0.587
 #define BWEIGHT 0.114
 #define QUANTIZATIONDEFAULT 150
+#define STEPSDEFAULT 5
 #define ERODED 0
-#define INVOKEERROR "usage: tf <Image_Path> [-q <quantization_amount>] [-s <steps_amount\n"
+#define EDGE -1
+#define INVOKEERROR "usage: tf <Image_Path> [-q <quantization_amount>] [-s <steps_amount>] [-h]\n\t-h for help\n\t-s for setting amount of steps used on dilation and erosion\n\t-q for tone count on quantization\n"
 
-Mat imageIn, quantized, region;
+
+
+Mat imageIn;
+Mat quantized;
+Mat region;
+Mat normals;
+
 int maxRegion = 0;
+
+Vec3f lightPos;
+Vec3f lightI;
+Vec3f ka;
+Vec3f ks;
+Vec3f kd;
+Vec3f cameraPos;
 
 void luminance()
 {
@@ -188,7 +213,7 @@ void segment()
 
 }
 
-void erode()
+void erode(int value)
 {
 	int sizex = region.cols;
 	int sizey = region.rows;
@@ -196,7 +221,7 @@ void erode()
 	temp = region.clone();
 	for(int r=1; r<maxRegion; r++)
 	{
-		std::cout << "	Progress... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
+		std::cout << "	Progress: " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
 		for(int i=0; i<sizey; i++)
 		{
 			for(int j=0; j<sizex; j++)
@@ -208,7 +233,7 @@ void erode()
 				(((j-1 > 0) && (temp.at<int>(i,j-1) != r))))
 				)
 				{
-					region.at<int>(i,j) = ERODED;
+					region.at<int>(i,j) = value;
 					Vec3b pixel;
 					pixel.val[R] = 0;
 					pixel.val[G] = 0;
@@ -219,50 +244,165 @@ void erode()
 			}
 		}
 	}
-	printf("	Progress... 100%%         \n");
+	printf("	Progress: 100%%         \n");
 }
 
-void dilate()
+void dilate(int r)
 {
 	int sizex = region.cols;
 	int sizey = region.rows;
 	Mat temp;
 	temp = region.clone();
-	for(int r=1; r<maxRegion; r++)
+	for(int i=1; i<sizey-1; i++)
 	{
-	std::cout << "Progress... " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
-		for(int i=1; i<sizey-1; i++)
+		for(int j=1; j<sizex-1; j++)
 		{
-			for(int j=1; j<sizex-1; j++)
+			if((temp.at<int>(i,j) == ERODED) && (
+			(((i-1 > 0) && (temp.at<int>(i-1,j) == r))) || 
+			(((i+1 < sizey-1) && (temp.at<int>(i+1,j) == r))) || 
+			(((j+1 < sizex-1) && (temp.at<int>(i,j+1) == r))) || 
+			(((j-1 > 0) && (temp.at<int>(i,j-1) == r))))
+			)
 			{
-				if((temp.at<int>(i,j) == ERODED) && (
-				(((i-1 > 0) && (temp.at<int>(i-1,j) == r))) || 
-				(((i+1 < sizey-1) && (temp.at<int>(i+1,j) == r))) || 
-				(((j+1 < sizex-1) && (temp.at<int>(i,j+1) == r))) || 
-				(((j-1 > 0) && (temp.at<int>(i,j-1) == r))))
-				)
-				{
-					region.at<int>(i,j) = r;
-				}	
-					
-			}
+				region.at<int>(i,j) = r;
+			}	
+				
 		}
-		
 	}
-	printf("	Progress... 100%%         \n");
+}
+
+void generateEdge(int step)
+{
+	for(int i=0;i<step;i++)
+	{
+		printf("Generating Edge...\n");
+		std::cout << "	Progress: " << std::setprecision(4) << ((float)i/step)*100 << "%     \t\t\r" << std::flush;
+		erode(EDGE);	
+	}
+	printf("	Progress: 100%%         \n");
+}
+
+float max(float a, float b)
+{
+	if (a > b)
+		return a;
+	return b;
+}
+
+float dot(Vec3f a, Vec3f b)
+{
+	return (a.val[X]*b.val[X] + a.val[Y]*b.val[Y] + a.val[Z]*b.val[Z]);
 }
 
 
+void generatePhongModel()
+{
+	int sizex = region.cols;
+	int sizey = region.rows;
+	
+	fnl_state noisex = fnlCreateState();
+	fnl_state noisey = fnlCreateState();
+	noisex.seed = rand();
+	noisey.seed = rand();
+	noisex.noise_type = FNL_NOISE_OPENSIMPLEX2S;
+	noisey.noise_type = FNL_NOISE_OPENSIMPLEX2S;
+	
+	for(int i=0; i<sizey; i++)
+	{
+		for(int j=0; j<sizex; j++)
+		{	
+				Vec3f normal;
+				normal.val[X] = fnlGetNoise2D(&noisex, i*5, j*5);
+				normal.val[Y] = 1.0;
+				normal.val[Z] = fnlGetNoise2D(&noisey, i*5, j*5);
+				normals.at<Vec3f>(i,j) = normal;
+		}
+	}
+	
+	
+	lightPos.val[X] = 0;
+	lightPos.val[Y] = 0;
+	lightPos.val[Z] = -100;
+	
+	
+	lightI.val[R] = 255;
+	lightI.val[G] = 255;
+	lightI.val[B] = 255;
+	
+	
+	ka.val[R] = KA;
+	ka.val[G] = KA;
+	ka.val[B] = KA;
+	
+	
+	ks.val[R] = KS;
+	ks.val[G] = KS;
+	ks.val[B] = KS;
+	
+	kd.val[R] = KD;
+	kd.val[G] = KD;
+	kd.val[B] = KD;
+	
+	cameraPos.val[X] = sizey/2;
+	cameraPos.val[Y] = sizex/2;
+	cameraPos.val[Z] = -100;
+
+	normalize(normals, normals, 1.0, 0.0, NORM_L1);
+	
+	printf("Finished normalizing\n");
+	for(int i=0; i<sizey; i++)
+	{
+		for(int j=0; j<sizex; j++)
+		{	
+			Vec3b pixel = quantized.at<Vec3b>(i,j);
+			Vec3f normal = normals.at<Vec3f>(i,j);
+			
+			Vec3f p;
+			p.val[X] = i;
+			p.val[Y] = j;
+			p.val[Z] = 0;
+			
+			Vec3f l;
+			l.val[X] = lightPos.val[X] - p.val[X];
+			l.val[Y] = lightPos.val[Y] - p.val[Y]; 
+			l.val[Z] = lightPos.val[Z] - p.val[Z];
+			
+			Vec3f r;
+			r.val[X] = 2*normal.val[X]*dot(normal,l) - l.val[X];
+			r.val[Y] = 2*normal.val[Y]*dot(normal,l) - l.val[Y];
+			r.val[Z] = 2*normal.val[Z]*dot(normal,l) - l.val[Z];
+			
+			Vec3f v;
+			v.val[X] = cameraPos.val[X] - p.val[X];
+			v.val[Y] = cameraPos.val[Y] - p.val[Y];
+			v.val[Z] = cameraPos.val[Z] - p.val[Z];
+			
+			pixel.val[X] = KD*lightI.val[R]*max(0,dot(normal, l))
+						+ pixel.val[X]*KA;
+//						+ KS*lightI.val[R]*pow(dot(r, v), Q);
+			pixel.val[Y] = KD*lightI.val[G]*max(0,dot(normal, l))
+						+ pixel.val[Y]*KA;
+//						+ KS*lightI.val[G]*pow(dot(r, v), Q);
+			pixel.val[Z] = KD*lightI.val[Z]*max(0,dot(normal, l))
+						+ pixel.val[Z]*KA;
+//						+ KS*lightI.val[B]*pow(dot(r, v), Q);
+			quantized.at<Vec3b>(i,j) = pixel;
+		}
+	}
+}
+
 int main(int argc, char** argv)
 {
-	int quantizationAmount, stepAmount = 5;
+	int quantizationAmount, stepAmount;
 	char* filename;
 	if ( argc < 2 )
     {
         printf(INVOKEERROR);
         return -1;
     }
-
+	
+	quantizationAmount = QUANTIZATIONDEFAULT;
+	stepAmount = STEPSDEFAULT;
 	filename = argv[1];
     imageIn = imread(filename , 1 );
     for(int i=0; i < argc; i++)
@@ -275,7 +415,7 @@ int main(int argc, char** argv)
     		}
     		else
     		{
-    		printf(INVOKEERROR);
+    			printf(INVOKEERROR);
     		}
 		}
 		else if (strcmp(argv[i], "-s") == 0)
@@ -284,6 +424,15 @@ int main(int argc, char** argv)
 			{
 				stepAmount = atoi(argv[i+1]);
 			}
+			else
+    		{
+    			printf(INVOKEERROR);
+    		}
+		}
+		else if (strcmp(argv[i], "-h") == 0)
+		{
+			printf(INVOKEERROR);
+			return 0;
 		}
     }
     if (quantizationAmount <= 0)
@@ -298,6 +447,8 @@ int main(int argc, char** argv)
 
 	srand(time(NULL));
     
+    
+    
     quantized = imageIn.clone();
     
     quantization(quantizationAmount);
@@ -307,41 +458,32 @@ int main(int argc, char** argv)
     imshow("Input Image", imageIn);
     
     region = Mat::zeros(quantized.rows, quantized.cols, CV_32S);
-    
+    normals = Mat::zeros(quantized.rows, quantized.cols, CV_32F);  
     segment();
     
     for(int i=0; i<stepAmount; i++)
     {
     	printf("Eroding... #%d\n", i+1);
-    	erode();
+    	erode(ERODED);
     }
     for(int i=0; i<stepAmount + 2; i++)
     {
-    	printf("Dilating... #%d\n", i+1);
-    	dilate();
-    }
-	for(int r=0; r<maxRegion; r++)
-	{
-		int _r = rand() % 256;
-		int _g = rand() % 256;
-		int _b = rand() % 256;
-		
-		for(int i=0; i<region.cols; i++)
+    	printf("Dilating... #%d\n", i+1);   	
+    	for(int r=1; r<maxRegion; r++)
 		{
-			for(int j=0; j<region.rows; j++)
-			{
-				if(region.at<int>(i,j) == r)
-				{
-					Vec3b pixel;
-					pixel.val[R] = _r;
-					pixel.val[G] = _g;
-					pixel.val[B] = _b;
-					quantized.at<Vec3b>(i,j) = pixel;	
-				}
-			}
-		}
-	}
+			std::cout << "	Progress: " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
+	    	dilate(r);
+	    }
+		printf("	Progress: 100%%         \n");
+    }
+    
+    generateEdge(stepAmount); 
+	
 
+	generatePhongModel();
+	
+	
+	
     imwrite("quantized.jpg", quantized);
     
 	imshow("Output Image", quantized);
