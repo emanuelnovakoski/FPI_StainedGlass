@@ -24,11 +24,12 @@ using namespace cv;
 #define RWEIGHT 0.299
 #define GWEIGHT 0.587
 #define BWEIGHT 0.114
-#define QUANTIZATIONDEFAULT 150
+#define QUANTIZATIONDEFAULT 5
 #define STEPSDEFAULT 5
+#define EDGEDEFAULT 3
 #define ERODED 0
 #define EDGE -1
-#define INVOKEERROR "usage: tf <Image_Path> [-q <quantization_amount>] [-s <steps_amount>] [-h]\n\t-h for help\n\t-s for setting amount of steps used on dilation and erosion\n\t-q for tone count on quantization\n"
+#define INVOKEERROR "usage: tf <Image_Path> -q <quantization_amount> -s <steps_amount> -h\n\t-h for help\n\t-s for setting amount of steps used on dilation and erosion\n\t-q for tone count on quantization\n"
 
 
 
@@ -189,9 +190,7 @@ void segment()
 				}
 			}
 			
-			int r = rand()%256;
-			int g = rand()%256;
-			int b = rand()%256;
+			int color = rand()%COLORCOUNT;
 		
 			for(int i=0; i< sizey; i++)
 				for(int j=0; j<sizex; j++)
@@ -200,9 +199,9 @@ void segment()
 					{
 						current[i][j] = false;
 						Vec3b pixel = quantized.at<Vec3b>(i,j);
-						pixel.val[R] = r;
-						pixel.val[G] = g;
-						pixel.val[B] = b;
+						pixel.val[R] = colors[color]->val[R];
+						pixel.val[G] = colors[color]->val[G];
+						pixel.val[B] = colors[color]->val[B];
 						quantized.at<Vec3b>(i,j) = pixel;
 					}
 				}
@@ -247,6 +246,65 @@ void erode(int value)
 	printf("	Progress: 100%%         \n");
 }
 
+
+void edge(int value)
+{
+	int sizex = region.cols;
+	int sizey = region.rows;
+	Mat temp;
+	temp = region.clone();
+	for(int r=1; r<maxRegion; r++)
+	{
+		std::cout << "	Progress: " << std::setprecision(4) << ((float)r/maxRegion)*100 << "%     \t\t\r" << std::flush;
+		for(int i=0; i<sizey; i++)
+		{
+			for(int j=0; j<sizex; j++)
+			{
+				bool edge = false;
+				Vec3f normal;
+				normal.val[X] = 0;
+				normal.val[Y] = 1.0;
+				normal.val[Z] = 0;
+				if(temp.at<int>(i,j) == r)
+				{
+					if (((i-1 > 0) && (temp.at<int>(i-1,j) != r)))
+					{
+						normal.val[X] += 1.0;
+						edge = true;
+					}
+					if (((i+1 < sizey-1) && (temp.at<int>(i+1,j) != r)))
+					{
+						normal.val[X] -= 1.0;
+						edge = true;
+					}
+					if (((j+1 < sizex-1) && (temp.at<int>(i,j+1) != r)))
+					{
+						normal.val[Z] += 1.0;
+						edge = true;
+					}
+					if (((j-1 > 0) && (temp.at<int>(i,j-1) != r)))
+					{
+						normal.val[Z] -= 1.0;
+						edge = true;
+					}
+				}
+				if(edge)
+				{
+					region.at<int>(i,j) = value;
+					Vec3b pixel;
+					pixel.val[R] = 0;
+					pixel.val[G] = 0;
+					pixel.val[B] = 0;
+					quantized.at<Vec3b>(i,j) = pixel;
+					normals.at<Vec3f>(i,j) = normal;	
+				}	
+					
+			}
+		}
+	}
+	printf("	Progress: 100%%         \n");
+}
+
 void dilate(int r)
 {
 	int sizex = region.cols;
@@ -277,7 +335,7 @@ void generateEdge(int step)
 	{
 		printf("Generating Edge...\n");
 		std::cout << "	Progress: " << std::setprecision(4) << ((float)i/step)*100 << "%     \t\t\r" << std::flush;
-		erode(EDGE);	
+		edge(EDGE);	
 	}
 	printf("	Progress: 100%%         \n");
 }
@@ -311,11 +369,14 @@ void generatePhongModel()
 	{
 		for(int j=0; j<sizex; j++)
 		{	
+			if(region.at<int>(i,j) != EDGE)
+			{
 				Vec3f normal;
-				normal.val[X] = fnlGetNoise2D(&noisex, i*5, j*5);
+				normal.val[X] = fnlGetNoise2D(&noisex, i*10, j*10);
 				normal.val[Y] = 1.0;
-				normal.val[Z] = fnlGetNoise2D(&noisey, i*5, j*5);
+				normal.val[Z] = fnlGetNoise2D(&noisey, i*10, j*10);
 				normals.at<Vec3f>(i,j) = normal;
+			}
 		}
 	}
 	
@@ -349,7 +410,6 @@ void generatePhongModel()
 
 	normalize(normals, normals, 1.0, 0.0, NORM_L1);
 	
-	printf("Finished normalizing\n");
 	for(int i=0; i<sizey; i++)
 	{
 		for(int j=0; j<sizex; j++)
@@ -393,7 +453,7 @@ void generatePhongModel()
 
 int main(int argc, char** argv)
 {
-	int quantizationAmount, stepAmount;
+	int quantizationAmount, stepAmount, edgethickness;
 	char* filename;
 	if ( argc < 2 )
     {
@@ -403,6 +463,7 @@ int main(int argc, char** argv)
 	
 	quantizationAmount = QUANTIZATIONDEFAULT;
 	stepAmount = STEPSDEFAULT;
+	edgethickness = EDGEDEFAULT;
 	filename = argv[1];
     imageIn = imread(filename , 1 );
     for(int i=0; i < argc; i++)
@@ -434,6 +495,17 @@ int main(int argc, char** argv)
 			printf(INVOKEERROR);
 			return 0;
 		}
+		else if(strcmp(argv[i], "-e") == 0)
+		{
+			if (i+1 < argc)
+			{
+				edgethickness = atoi(argv[i+1]);
+			}
+			else
+    		{
+    			printf(INVOKEERROR);
+    		}
+		}
     }
     if (quantizationAmount <= 0)
     {
@@ -461,6 +533,8 @@ int main(int argc, char** argv)
     normals = Mat::zeros(quantized.rows, quantized.cols, CV_32F);  
     segment();
     
+    imwrite("segmented.jpg", quantized);
+    
     for(int i=0; i<stepAmount; i++)
     {
     	printf("Eroding... #%d\n", i+1);
@@ -477,16 +551,18 @@ int main(int argc, char** argv)
 		printf("	Progress: 100%%         \n");
     }
     
-    generateEdge(stepAmount); 
+    imwrite("regions.jpg", quantized);
+    
+    generateEdge(edgethickness); 
 	
+	imwrite("edge.jpg", quantized);
 
 	generatePhongModel();
 	
-	
-	
-    imwrite("quantized.jpg", quantized);
+    imwrite("stainedGlass.jpg", quantized);
     
 	imshow("Output Image", quantized);
+	
     waitKey(0);
 
     return 0;

@@ -1,5 +1,6 @@
 //  Include for heraldic colors
 #include <opencv2/opencv.hpp>
+#include <list>
 #define COLORCOUNT 10
 
 using namespace cv;
@@ -14,3 +15,5 @@ Vec3b* TENNE = new Vec3b(250, 150, 50);
 Vec3b* VERT = new Vec3b(0, 150, 0);
 Vec3b* OR = new Vec3b(255, 220, 10);
 Vec3b* ARGENT = new Vec3b(240, 240, 240);
+
+Vec3b* colors[COLORCOUNT] = {AZURE, GULES, MURREY, PURPURE, SABLE, SANGUINE, TENNE, VERT, OR, ARGENT};
